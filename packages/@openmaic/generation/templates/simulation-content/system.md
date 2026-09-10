@@ -7,11 +7,21 @@ Generate a self-contained HTML simulation with embedded widget configuration.
 Your output must be a complete HTML document with:
 
 1. **Standard HTML5 structure**
-2. **Embedded widget configuration** in a `<script type="application/json" id="widget-config">` tag
-3. **Interactive controls** for variables
-4. **Canvas or SVG visualization**
-5. **Mobile-responsive design**
-6. **postMessage listener** for widget actions (REQUIRED)
+2. **UTF-8 declaration**: include `<meta charset="utf-8">` in `<head>`
+3. **Embedded widget configuration** in a `<script type="application/json" id="widget-config">` tag
+4. **Interactive controls** for variables
+5. **Canvas or SVG visualization**
+6. **Mobile-responsive design**
+7. **postMessage listener** for widget actions (REQUIRED)
+
+## Text and Font Safety
+
+- Keep all visible text valid UTF-8.
+- Follow the requested lesson language consistently for titles, labels, hints, status text and buttons.
+- Do not mix unrelated scripts or substitute look-alike glyphs from other writing systems.
+- Do not depend on remote web fonts or icon-font CDNs for essential text rendering.
+- Use a robust local/system font stack, for example: `Inter, "Noto Sans SC", "PingFang SC", "PingFang TC", "Microsoft YaHei", "Microsoft JhengHei", system-ui, sans-serif`.
+- Before returning the HTML, reread every learner-visible string and fix any corrupted or semantically broken text.
 
 ## Widget Config Schema
 
@@ -28,6 +38,25 @@ Your output must be a complete HTML document with:
   ]
 }
 ```
+
+## CRITICAL: Runtime State Contract
+
+Use a single explicit state object as the source of truth for the entire simulation. Controls, numeric readouts, canvas/SVG output and status labels must all be rendered from that same state.
+
+Required behavior:
+
+- Register event listeners once, after referenced elements exist.
+- Starting must cause an obvious visible change immediately.
+- Time-based motion must use one `requestAnimationFrame` loop with elapsed-time delta; never start duplicate loops on repeated Start/Resume clicks.
+- Pause stops progression but preserves state.
+- Reset cancels active animation/timers and restores every variable, control value, readout and visual element to its exact initial state.
+- Slider changes and presets must update state and call the same render/update path used by the running simulation.
+- Numeric readouts must be derived from current state, not maintained as disconnected counters.
+- Never branch on button text. Branch only on explicit state values.
+
+Before output, mentally execute this sequence and repair any broken transition:
+
+`load → start → pause → resume → change slider → apply preset → reset → start again`
 
 ## CRITICAL: postMessage Listener for Widget Actions
 
@@ -303,6 +332,8 @@ const objectY = baseY - BOTTOM_MARGIN - (value / maxValue) * playableHeight;
 
 ## Quality Checklist (verify before output)
 
+- [ ] UTF-8 meta tag is present and visible strings are intact in the requested language
+- [ ] Essential text uses local/system font fallbacks, not remote font dependencies
 - [ ] Control panel does NOT overlap canvas on mobile (test 320px width)
 - [ ] Reset button returns simulation to EXACT initial state
 - [ ] Button text matches button action correctly
@@ -310,6 +341,9 @@ const objectY = baseY - BOTTOM_MARGIN - (value / maxValue) * playableHeight;
 - [ ] Canvas resizes properly on window resize
 - [ ] State machine is clear (running/paused/ended)
 - [ ] All state variables reset on resetSimulation()
+- [ ] No duplicate animation loops/timers can be created
+- [ ] Slider/preset updates and animation frames share the same render path
+- [ ] `load → start → pause → resume → slider → preset → reset → start again` works coherently
 - [ ] Works on both desktop and mobile browsers
 - [ ] **NO DUPLICATED HTML** - exactly ONE `<!DOCTYPE html>` tag
 - [ ] Simulation objects are visible and not hidden under UI overlays
