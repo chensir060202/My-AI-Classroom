@@ -1,28 +1,46 @@
+import {
+  normalizeStructuredSimulationSpec,
+  renderStructuredSimulationHtml,
+} from './structured-simulation.js';
+
 /**
  * Interactive HTML Post-Processor
  *
- * Ported from Python's PostProcessor class (learn-your-way/concept_to_html.py:287-385)
- *
- * Handles:
- * - LaTeX delimiter conversion ($$...$$ -> \[...\], $...$ -> \(...\))
- * - KaTeX CSS/JS injection with auto-render and MutationObserver
- * - Script tag protection during LaTeX conversion
- */
-
-/**
- * Main entry point: post-process generated interactive HTML
- * Converts LaTeX delimiters and injects KaTeX rendering resources.
+ * Handles two paths:
+ * - Structured simulation envelope -> deterministic host renderer
+ * - Legacy generated HTML -> LaTeX conversion + KaTeX injection
  */
 export function postProcessInteractiveHtml(html: string): string {
-  // Convert LaTeX delimiters while protecting script tags
+  const structuredSpec = extractStructuredSimulationSpec(html);
+  if (structuredSpec !== null) {
+    const normalized = normalizeStructuredSimulationSpec(structuredSpec);
+    if (normalized) {
+      return renderStructuredSimulationHtml(normalized);
+    }
+  }
+
+  // Legacy compatibility path. If the structured contract is absent or invalid,
+  // keep the model-generated HTML instead of making the scene unusable.
   let processed = convertLatexDelimiters(html);
 
-  // Inject KaTeX resources if not already present
   if (!processed.toLowerCase().includes('katex')) {
     processed = injectKatex(processed);
   }
 
   return processed;
+}
+
+function extractStructuredSimulationSpec(html: string): unknown | null {
+  const match = html.match(
+    /<script\s+type=["']application\/json["']\s+id=["']structured-simulation-spec["']\s*>([\s\S]*?)<\/script>/i,
+  );
+  if (!match) return null;
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -36,25 +54,14 @@ export function postProcessInteractiveHtml(html: string): string {
 function convertLatexDelimiters(html: string): string {
   const scriptBlocks: string[] = [];
 
-  // Protect script tags by replacing them with placeholders
   let processed = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, (match) => {
     scriptBlocks.push(match);
     return `__SCRIPT_BLOCK_${scriptBlocks.length - 1}__`;
   });
 
-  // Convert display math: $$...$$ -> \[...\]
   processed = processed.replace(/\$\$([^$]+)\$\$/g, '\\[$1\\]');
-
-  // Convert inline math: $...$ -> \(...\)
-  // Use non-greedy match and exclude newlines to avoid false positives
   processed = processed.replace(/\$([^$\n]+?)\$/g, '\\($1\\)');
 
-  // Restore script blocks in a single pass. A replacer FUNCTION (not a string)
-  // is safe even when script content contains `$` — a function's return value
-  // is inserted literally, with no `$&`/`$1` substitution. The previous
-  // indexOf+substring loop rebuilt the entire string once per block, i.e.
-  // O(blocks × length), which balloons memory and blocks the event loop when
-  // the generated widget HTML contains many <script> tags.
   processed = processed.replace(
     /__SCRIPT_BLOCK_(\d+)__/g,
     (whole, index) => scriptBlocks[Number(index)] ?? whole,
@@ -63,10 +70,7 @@ function convertLatexDelimiters(html: string): string {
   return processed;
 }
 
-/**
- * Inject KaTeX CSS, JS, auto-render, and MutationObserver before </head>.
- * Falls back to appending at end if </head> is not found.
- */
+/** Inject KaTeX CSS/JS and auto-render support into legacy generated HTML. */
 function injectKatex(html: string): string {
   const katexInjection = `
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -128,9 +132,6 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>`;
 
-  // Use indexOf + substring instead of String.replace() because the
-  // katexInjection string contains '$' characters that .replace() would
-  // interpret as special substitution patterns ($$ → $, $' → post-match text).
   const headCloseIdx = html.indexOf('</head>');
   if (headCloseIdx !== -1) {
     return (
@@ -141,7 +142,6 @@ document.addEventListener("DOMContentLoaded", function() {
     );
   }
 
-  // Fallback: inject before </body> if </head> is missing
   const bodyCloseIdx = html.indexOf('</body>');
   if (bodyCloseIdx !== -1) {
     return (
@@ -152,6 +152,5 @@ document.addEventListener("DOMContentLoaded", function() {
     );
   }
 
-  // Last resort: append at end
   return html + katexInjection;
 }
