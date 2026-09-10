@@ -31,6 +31,17 @@ export {
 export type { GenerationRetryEvent, GenerationRetryOptions } from './generation-retry.js';
 export { parseActionsFromStructuredOutput } from './action-parser.js';
 export { postProcessInteractiveHtml } from './interactive-post-processor.js';
+export {
+  normalizeStructuredSimulationSpec,
+  renderStructuredSimulationHtml,
+} from './structured-simulation.js';
+export type {
+  StructuredSimulationBoundary,
+  StructuredSimulationPreset,
+  StructuredSimulationSpec,
+  StructuredSimulationUi,
+  StructuredSimulationVariable,
+} from './structured-simulation.js';
 export { generatePBLV2ProjectSingleCall } from './pbl/planner-single-call.js';
 export type { PlannerSingleCallFn } from './pbl/planner-single-call.js';
 export type { PBLPlannerV2Input, PriorQuizResult } from './pbl/types.js';
